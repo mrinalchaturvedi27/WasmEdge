@@ -932,6 +932,8 @@ E(MalformedTable, 0x011B, "malformed table")
 E(MalformedMemoryOpFlags, 0x011C, "malformed memop flags")
 // Malformed limit flag (Mem64 proposal).
 E(MalformedLimitFlags, 0x011D, "malformed limits flags")
+// Malformed catch flag (Exception-handling proposal).
+E(MalformedCatchFlags, 0x011E, "malformed catch flags")
 // @}
 
 // Component model load phase
@@ -969,7 +971,7 @@ E(ComponentNotImplLoader, 0x01AD, "component model (loader) not implemented")
 // Validation phase
 // @{
 // Alignment != natural
-E(InvalidAlignment, 0x0200, "atomic alignment must be equal to natural")
+E(InvalidAlignment, 0x0200, "atomic alignment must be natural")
 // Alignment > natural
 E(AlignmentTooLarge, 0x0201, "alignment must not be larger than natural")
 // Got unexpected type when checking

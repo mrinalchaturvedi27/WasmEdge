@@ -1,16 +1,78 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2019-2024 Second State INC
 
-#include "common/configure.h"
+#include "ast/component/component.h"
+#include "common/errinfo.h"
+#include "validator/validator.h"
 #include "vm/vm.h"
 
 #include <gtest/gtest.h>
 
-#include <vector>
-
 namespace {
 
 using namespace WasmEdge;
+using namespace std::literals;
+
+TEST(Component, LoadAndValidate_TestWasm) {
+  Configure Conf;
+  Conf.addProposal(Proposal::Component);
+  VM::VM VM(Conf);
+
+  std::vector<uint8_t> Vec = {
+      0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00, // WASM preamble
+
+      0x07, 0x12, 0x01,             // Type section: size 0x12, vector size 1
+      0x42, 0x02,                   // TypeSec[0]: instance type, vector size 2
+      0x01, 0x40, 0x00, 0x01, 0x00, // InstType[0]: type: functype {}->{}
+      0x04,                         // InstType[1]: exportdecl
+      0x00, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f, // exportdecl: name "hello"
+      0x01, 0x00, // exportdecl: externdesc: func[0]
+
+      0x0a, 0x11, 0x01, // Import section: size 0x11, vector size 1
+      0x00, 0x0c,       // ImportSec[0]: import name "my:demo/host"
+      0x6d, 0x79, 0x3a, 0x64, 0x65, 0x6d, 0x6f, 0x2f, 0x68, 0x6f, 0x73, 0x74,
+      0x05, 0x00, // import externdesc: instance[0]
+
+      0x01, 0x57, // CoreModule section: size 0x57
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // WASM header
+      0x01, 0x04, 0x01, 0x60, 0x00, 0x00, // Type section: {func{}->{}}
+      0x02, 0x16, 0x01, 0x0c,             // Import section: vector size 1
+      0x6d, 0x79, 0x3a, 0x64, 0x65, 0x6d, 0x6f, 0x2f, 0x68, 0x6f, 0x73, 0x74,
+      0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f, // "my:demo/host" "hello"
+      0x00, 0x00,                         // import func[0]
+      0x00, 0x2f, 0x09, 0x70, 0x72, 0x6f, 0x64, 0x75, 0x63, 0x65, 0x72, 0x73,
+      0x01, 0x0c, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x65, 0x64, 0x2d,
+      0x62, 0x79, 0x01, 0x0d, 0x77, 0x69, 0x74, 0x2d, 0x63, 0x6f, 0x6d, 0x70,
+      0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x07, 0x30, 0x2e, 0x32, 0x32, 0x37, 0x2e,
+      0x31, // Custom section
+
+      0x06, 0x0a, 0x01, // Alias section: size 0x0a, vector size 1
+      0x01,             // sort: func
+      0x00, 0x00,       // target: instance[0]
+      0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f, // target: name "hello"
+
+      0x08, 0x05, 0x01,       // Canon section: size 0x05, vector size 1
+      0x01, 0x00, 0x00, 0x00, // canon lower func[0]
+
+      0x02, 0x1d, 0x02, // CoreInstance section: size 0x1d, vector size 2
+      0x01, 0x01,       // CoreInstSec[0]: inlineexport
+      0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f, // export name "hello"
+      0x00, 0x00,                         // export sort func[0]
+      0x00, 0x00, // CoreInstSec[1]: instantiate module[0]
+      0x01, 0x0c, 0x6d, 0x79, 0x3a, 0x64, 0x65, 0x6d, 0x6f, 0x2f, 0x68, 0x6f,
+      0x73, 0x74, // module name "my:demo/host"
+      0x12, 0x00, // instance index 0
+
+      0x00, 0x2f, 0x09, 0x70, 0x72, 0x6f, 0x64, 0x75, 0x63, 0x65, 0x72, 0x73,
+      0x01, 0x0c, 0x70, 0x72, 0x6f, 0x63, 0x65, 0x73, 0x73, 0x65, 0x64, 0x2d,
+      0x62, 0x79, 0x01, 0x0d, 0x77, 0x69, 0x74, 0x2d, 0x63, 0x6f, 0x6d, 0x70,
+      0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x07, 0x30, 0x2e, 0x32, 0x32, 0x37, 0x2e,
+      0x31, // Custom section
+  };
+
+  ASSERT_TRUE(VM.loadWasm(Vec));
+  ASSERT_TRUE(VM.validate());
+}
 
 TEST(Component, LoadAndRun_SimpleBinary) {
   Configure Conf;
@@ -636,6 +698,243 @@ TEST(Component, LoadAndRun_MultiComponentBinary) {
   ASSERT_TRUE(VM.validate());
   ASSERT_TRUE(VM.instantiate());
   */
+}
+
+TEST(ComponentValidatorTest, MissingArgument) {
+  AST::Component::Component Comp;
+  Comp.getSections().emplace_back();
+  Comp.getSections().back().emplace<AST::Component::ComponentSection>();
+  Comp.getSections().emplace_back();
+  Comp.getSections().back().emplace<AST::Component::InstanceSection>();
+  auto &CompSec =
+      std::get<AST::Component::ComponentSection>(Comp.getSections()[0]);
+  auto &InstSec =
+      std::get<AST::Component::InstanceSection>(Comp.getSections()[1]);
+
+  CompSec.getContent() = std::make_unique<AST::Component::Component>();
+  CompSec.getContent()->getSections().emplace_back();
+  CompSec.getContent()
+      ->getSections()
+      .back()
+      .emplace<AST::Component::ImportSection>();
+  auto &ImpSec = std::get<AST::Component::ImportSection>(
+      CompSec.getContent()->getSections().back());
+  ImpSec.getContent().emplace_back();
+  ImpSec.getContent().back().getName() = "f";
+  ImpSec.getContent().back().getDesc().setFuncTypeIdx(0);
+
+  InstSec.getContent().emplace_back();
+  AST::Component::InstantiateArg<AST::Component::SortIndex> Arg;
+  Arg.getName() = "g";
+  Arg.getIndex().getSort().setSortType(AST::Component::Sort::SortType::Func);
+  Arg.getIndex().setIdx(0);
+  InstSec.getContent().back().setInstantiateArgs(0U, {Arg});
+
+  Configure Conf;
+  Conf.addProposal(Proposal::Component);
+  Validator::Validator Validator(Conf);
+  ASSERT_FALSE(Validator.validate(Comp));
+}
+
+TEST(ComponentValidatorTest, TypeMismatch) {
+  AST::Component::Component Comp;
+  Comp.getSections().emplace_back();
+  Comp.getSections().back().emplace<AST::Component::ComponentSection>();
+  Comp.getSections().emplace_back();
+  Comp.getSections().back().emplace<AST::Component::InstanceSection>();
+  auto &CompSec =
+      std::get<AST::Component::ComponentSection>(Comp.getSections()[0]);
+  auto &InstSec =
+      std::get<AST::Component::InstanceSection>(Comp.getSections()[1]);
+
+  CompSec.getContent() = std::make_unique<AST::Component::Component>();
+  CompSec.getContent()->getSections().emplace_back();
+  CompSec.getContent()
+      ->getSections()
+      .back()
+      .emplace<AST::Component::ImportSection>();
+  auto &ImpSec = std::get<AST::Component::ImportSection>(
+      CompSec.getContent()->getSections().back());
+  ImpSec.getContent().emplace_back();
+  ImpSec.getContent().back().getName() = "f";
+  ImpSec.getContent().back().getDesc().setFuncTypeIdx(0);
+
+  InstSec.getContent().emplace_back();
+  AST::Component::InstantiateArg<AST::Component::SortIndex> Arg;
+  Arg.getName() = "f";
+  Arg.getIndex().getSort().setSortType(
+      AST::Component::Sort::SortType::Component);
+  Arg.getIndex().setIdx(0);
+  InstSec.getContent().back().setInstantiateArgs(0U, {Arg});
+
+  WasmEdge::Configure Conf;
+  WasmEdge::Validator::Validator Validator(Conf);
+  ASSERT_FALSE(Validator.validate(Comp));
+}
+
+TEST(ComponentNameParser, Functions) {
+  {
+    std::string_view Name = "[constructor]MyClass"sv;
+    std::string_view Prefix = "[constructor]"sv;
+    EXPECT_TRUE(Validator::ComponentNameParser::tryRead(Prefix, Name));
+    spdlog::error("Remaining name: {}", Name);
+    EXPECT_EQ(Name, "MyClass");
+  }
+  {
+    std::string_view Name = "[constructor]MyClass"sv;
+    std::string_view Prefix = "[fail]"sv;
+    EXPECT_FALSE(Validator::ComponentNameParser::tryRead(Prefix, Name));
+    EXPECT_EQ(Name, "[constructor]MyClass");
+  }
+}
+
+TEST(ComponentNameParser, Kebab) {
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("A"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("abc-def-ghi"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("ABC-DEF-GHI"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("ABC-def-GHI"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("ABC-123"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("ABC123-G45H"sv));
+
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("a"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("a1"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("a-1"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("a-1-b-2-c-3"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("B"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("B1"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("B-1"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("B-1-C-2-D-3"sv));
+  EXPECT_TRUE(
+      Validator::ComponentNameParser::isKebabString("a11-B11-123-ABC-abc"sv));
+  EXPECT_TRUE(Validator::ComponentNameParser::isKebabString("a-1-c"sv));
+
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("abcDefGhi"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("abc_def_ghi"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("abc def ghi"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("Abc-Fef-Ghi"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("ABC123-G45h"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("Abc--Ghi"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("Abc-"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("-Ghi"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("1-abc"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString(""sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("中文字"sv));
+
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("1"sv));
+  EXPECT_FALSE(Validator::ComponentNameParser::isKebabString("1-a"sv));
+
+  EXPECT_TRUE(
+      Validator::ComponentNameParser::isLowercaseKebabString("abc-def-ghi"sv));
+  EXPECT_TRUE(
+      Validator::ComponentNameParser::isLowercaseKebabString("abc-123"sv));
+
+  EXPECT_FALSE(
+      Validator::ComponentNameParser::isLowercaseKebabString("aBc-def-ghi"sv));
+  EXPECT_FALSE(
+      Validator::ComponentNameParser::isLowercaseKebabString("ABC-def-ghi"sv));
+
+  {
+    std::string_view Input = "abc-def-ghi/rest-of-string"sv;
+    std::string_view Output;
+    EXPECT_TRUE(Validator::ComponentNameParser::tryReadKebab(Input, Output));
+    EXPECT_EQ(Output, "abc-def-ghi"sv);
+    EXPECT_EQ(Input, "/rest-of-string"sv);
+
+    EXPECT_TRUE(Validator::ComponentNameParser::readUntil(Input, '/', Output));
+    EXPECT_EQ(Input, "rest-of-string"sv);
+    EXPECT_EQ(Output, ""sv);
+    EXPECT_TRUE(Validator::ComponentNameParser::tryReadKebab(Input, Output));
+    EXPECT_EQ(Output, "rest-of-string"sv);
+    EXPECT_TRUE(Validator::ComponentNameParser::isEOF(Input));
+  }
+}
+
+TEST(ComponentNameParser, Parse) {
+  {
+    std::string_view Name = "[constructor]my-class"sv;
+    Validator::ComponentName CName(Name);
+    EXPECT_EQ(CName.getKind(), Validator::ComponentNameKind::Constructor);
+    EXPECT_EQ(CName.getDetails().Constructor.Label, "my-class"sv);
+    EXPECT_EQ(CName.getNoTagName(), "my-class"sv);
+    EXPECT_EQ(CName.getOriginalName(), "[constructor]my-class"sv);
+  }
+  {
+    std::string_view Name = "[method]my-resource.my-method"sv;
+    Validator::ComponentName CName(Name);
+    EXPECT_EQ(CName.getKind(), Validator::ComponentNameKind::Method);
+    EXPECT_EQ(CName.getDetails().Method.Resource, "my-resource"sv);
+    EXPECT_EQ(CName.getDetails().Method.Method, "my-method"sv);
+    EXPECT_EQ(CName.getNoTagName(), "my-resource.my-method"sv);
+    EXPECT_EQ(CName.getOriginalName(), "[method]my-resource.my-method"sv);
+  }
+  {
+    std::string_view Name = "[static]my-resource.my-method"sv;
+    Validator::ComponentName CName(Name);
+    EXPECT_EQ(CName.getKind(), Validator::ComponentNameKind::Static);
+    EXPECT_EQ(CName.getDetails().Static.Resource, "my-resource"sv);
+    EXPECT_EQ(CName.getDetails().Static.Method, "my-method"sv);
+    EXPECT_EQ(CName.getNoTagName(), "my-resource.my-method"sv);
+    EXPECT_EQ(CName.getOriginalName(), "[static]my-resource.my-method"sv);
+  }
+  {
+    std::string_view Name = "name-space:a-label/projection-label@1.2.3"sv;
+    Validator::ComponentName CName(Name);
+    EXPECT_EQ(CName.getKind(), Validator::ComponentNameKind::InterfaceType);
+    EXPECT_EQ(CName.getDetails().Interface.Namespace, "name-space"sv);
+    EXPECT_EQ(CName.getDetails().Interface.Package, "a-label"sv);
+    EXPECT_EQ(CName.getDetails().Interface.Interface, "projection-label"sv);
+    EXPECT_EQ(CName.getDetails().Interface.Projection, ""sv);
+    EXPECT_EQ(CName.getDetails().Interface.Version, "1.2.3"sv);
+  }
+}
+
+TEST(ComponentNameParser, StronglyUniqueBasicCases) {
+  using namespace Validator;
+  ComponentContext::Context Ctx(nullptr);
+
+  auto add = [&](std::string_view S) {
+    ComponentName CN(S);
+    return Ctx.AddImportedName(CN);
+  };
+
+  // Accept set: all should be strongly-unique together.
+  EXPECT_TRUE(add("foo"sv));
+  EXPECT_TRUE(add("foo-bar"sv));
+  EXPECT_TRUE(add("[constructor]foo"sv));
+  EXPECT_TRUE(add("[method]foo.bar"sv));
+  EXPECT_TRUE(add("[method]foo.baz"sv));
+
+  // Reject additions against the accepted set above.
+  // Duplicate label
+  EXPECT_FALSE(add("foo"sv));
+  // Normalized duplicate of kebab label (foo-BAR -> foo-bar)
+  EXPECT_FALSE(add("foo-BAR"sv));
+  // Normalized duplicate of constructor label
+  EXPECT_FALSE(add("[constructor]foo-BAR"sv));
+  // l vs [*]l.l conflict
+  EXPECT_FALSE(add("[method]foo.foo"sv));
+  // Normalized duplicate of method (foo.BAR -> foo.bar)
+  EXPECT_FALSE(add("[method]foo.BAR"sv));
+}
+
+TEST(ComponentNameParser, StronglyUnique) {
+  using namespace Validator;
+  ComponentContext::Context Ctx(nullptr);
+
+  auto add = [&](std::string_view S) {
+    ComponentName CN(S);
+    return Ctx.AddImportedName(CN);
+  };
+
+  // Accept set: all should be strongly-unique together.
+  EXPECT_TRUE(add("[method]foo.abc"sv));
+  EXPECT_TRUE(add("[constructor]foo"sv));
+  EXPECT_TRUE(add("foo-bar"sv));
+  EXPECT_TRUE(add("foo"sv));
+
+  // Reject additions against the accepted set above.
+  EXPECT_FALSE(add("[method]foo"sv));
+  EXPECT_FALSE(add("[static]foo.abc"sv));
 }
 
 } // namespace
